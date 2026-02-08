@@ -89,7 +89,9 @@
     const refreshBtn = document.getElementById('refreshBtn');
 
     async function fetchAvailability() {
-      window.navigator.vibrate(40);
+      if ('vibrate' in navigator) {
+        navigator.vibrate(40);
+      }
       refreshBtn.classList.add('animate-spin');
 
       const year = currentViewDate.getFullYear();
