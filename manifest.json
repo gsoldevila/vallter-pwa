@@ -1,7 +1,8 @@
 {
   "name": "Vallter Passes",
   "short_name": "Vallter",
-  "start_url": ".",
+  "start_url": "/vallter-pwa/",
+  "scope": "/vallter-pwa/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#2563eb",
