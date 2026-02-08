@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vallter Availability</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    .loader {
+      border: 4px solid #1e293b;
+      border-top: 4px solid #3b82f6;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-slate-900 text-white font-sans">
+
+  <div class="max-w-md mx-auto p-4">
+    <div class="flex justify-between items-center mb-6">
+      <button id="prevMonth" class="p-3 bg-slate-800 rounded-full active:bg-slate-700">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m15 18-6-6 6-6" /></svg>
+      </button>
+
+      <div class="text-center">
+        <h1 id="monthTitle" class="text-xl font-bold capitalize">Month Year</h1>
+      </div>
+
+      <div class="flex gap-2">
+        <button id="refreshBtn" class="p-3 bg-blue-600 rounded-full active:scale-95 transition-transform">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+            <path d="M3 21v-5h5" /></svg>
+        </button>
+        <button id="nextMonth" class="p-3 bg-slate-800 rounded-full active:bg-slate-700">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m9 18 6-6-6-6" /></svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="calendar" class="grid grid-cols-7 gap-2 text-center">
+      <div class="text-xs font-bold text-slate-500 pb-2">Mo</div>
+      <div class="text-xs font-bold text-slate-500 pb-2">Tu</div>
+      <div class="text-xs font-bold text-slate-500 pb-2">We</div>
+      <div class="text-xs font-bold text-slate-500 pb-2">Th</div>
+      <div class="text-xs font-bold text-slate-500 pb-2">Fr</div>
+      <div class="text-xs font-bold text-slate-500 pb-2">Sa</div>
+      <div class="text-xs font-bold text-slate-500 pb-2">Su</div>
+    </div>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+
+    const TOTAL_CAPACITY = 1200;
+    const workerUrl = 'https://vallter.soldevila.workers.dev/';
+
+    // State: Start at the current date
+    let currentViewDate = new Date();
+    currentViewDate.setDate(1); // Normalize to 1st of the month
+
+    const calendarEl = document.getElementById('calendar');
+    const monthTitle = document.getElementById('monthTitle');
+    const refreshBtn = document.getElementById('refreshBtn');
+
+    async function fetchAvailability() {
+      window.navigator.vibrate(40);
+      refreshBtn.classList.add('animate-spin');
+
+      const year = currentViewDate.getFullYear();
+      const month = currentViewDate.getMonth();
+
+      // Helper to format YYYY-MM-DD without timezone shifting
+      const formatDate = (y, m, d) => {
+        return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      };
+
+      // First day of viewed month
+      const firstDay = formatDate(year, month, 1);
+
+      // Last day of viewed month (0th day of next month is last day of current)
+      const lastDayDate = new Date(year, month + 1, 0);
+      const lastDay = formatDate(year, month, lastDayDate.getDate());
+
+      console.log(`Fetching range: ${firstDay} to ${lastDay}`);
+
+      // Update UI Title
+      const monthName = currentViewDate.toLocaleString('ca-ES', {
+        month: 'long',
+        year: 'numeric'
+      });
+      monthTitle.innerText = monthName;
+
+      const formData = new FormData();
+      formData.append('from', firstDay);
+      formData.append('to', lastDay);
+
+      try {
+        const response = await fetch(workerUrl, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await response.json();
+        renderCalendar(data);
+      } catch (err) {
+        console.error("Fetch error:", err);
+        // Clear calendar and show error if needed
+      } finally {
+        refreshBtn.classList.remove('animate-spin');
+      }
+    }
+
+    function getColor(available) {
+      const ratio = Math.min(available / TOTAL_CAPACITY, 1);
+      const hue = ratio * 120;
+      return `hsl(${hue}, 70%, 40%)`;
+    }
+
+    function renderCalendar(data) {
+      // 1. Reset Grid (Keep headers)
+      const headers = Array.from(calendarEl.children).slice(0, 7);
+      calendarEl.innerHTML = '';
+      headers.forEach(h => calendarEl.appendChild(h));
+
+      // 2. Identify Month Details
+      const year = currentViewDate.getFullYear();
+      const month = currentViewDate.getMonth();
+      const firstDate = new Date(year, month, 1);
+      const lastDate = new Date(year, month + 1, 0).getDate();
+
+      // 3. Padding (Monday-start)
+      let dayOfWeek = firstDate.getDay();
+      let padding = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      for (let i = 0; i < padding; i++) {
+        calendarEl.appendChild(document.createElement('div'));
+      }
+
+      // 4. Create a Lookup Map for API data
+      // This makes it easy to ask: "Do we have info for Feb 5th?"
+      const availabilityMap = {};
+      data.forEach(item => {
+        availabilityMap[item.Date] = item.Available;
+      });
+
+      // 5. Loop through EVERY day of the month
+      for (let d = 1; d <= lastDate; d++) {
+        const dayDiv = document.createElement('div');
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const available = availabilityMap[dateStr];
+
+        dayDiv.className =
+          "flex flex-col items-center justify-center aspect-square rounded-xl text-white shadow-sm transition-transform active:scale-90";
+
+        if (available !== undefined) {
+          // Future/Bookable Date
+          dayDiv.style.backgroundColor = getColor(available);
+          dayDiv.innerHTML = `
+                <span class="text-sm font-bold">${d}</span>
+                <span class="text-[8px] opacity-90">${available}</span>
+            `;
+        } else {
+          // Past Date or No Data
+          dayDiv.classList.add("bg-slate-800", "opacity-40");
+          dayDiv.innerHTML = `<span class="text-sm font-medium text-slate-400">${d}</span>`;
+        }
+
+        // Highlight "Today"
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (dateStr === todayStr) {
+          dayDiv.classList.add("ring-2", "ring-blue-500", "ring-offset-2", "ring-offset-slate-900");
+        }
+
+        calendarEl.appendChild(dayDiv);
+      }
+    }
+
+    // Navigation Listeners
+    document.getElementById('prevMonth').onclick = () => {
+      currentViewDate.setMonth(currentViewDate.getMonth() - 1);
+      fetchAvailability();
+    };
+
+    document.getElementById('nextMonth').onclick = () => {
+      currentViewDate.setMonth(currentViewDate.getMonth() + 1);
+      fetchAvailability();
+    };
+
+    refreshBtn.onclick = fetchAvailability;
+
+    // Initial Load
+    fetchAvailability();
+  </script>
+</body>
+
+</html>
